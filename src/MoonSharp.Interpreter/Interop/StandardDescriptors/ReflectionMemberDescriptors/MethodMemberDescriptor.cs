@@ -192,7 +192,8 @@ namespace MoonSharp.Interpreter.Interop
 					pars = m_ArgumentArrays.Pop();
 			if (pars == null)
 				pars = new object[Parameters.Length];
-			base.BuildArgumentList(script, obj, context, args, pars, out outParams);
+			ulong lent;
+			base.BuildArgumentList(script, obj, context, args, pars, out outParams, true, out lent);
 			object retv = null;
 
 			if (m_OptimizedFunc != null)
@@ -218,6 +219,12 @@ namespace MoonSharp.Interpreter.Interop
 			}
 
 			var result = BuildReturnValue(script, outParams, pars, retv);
+
+			// the method had copies of its value-type arguments, so the boxes lent for them go back to the pool
+			for (int b = 0; b < pars.Length && lent != 0; b++, lent >>= 1)
+				if ((lent & 1) != 0)
+					Converters.BoxPool.Return(Parameters[b].Type, pars[b]);
+
 			Array.Clear(pars, 0, pars.Length);
 			lock (m_ArgumentArrays)
 				m_ArgumentArrays.Push(pars);

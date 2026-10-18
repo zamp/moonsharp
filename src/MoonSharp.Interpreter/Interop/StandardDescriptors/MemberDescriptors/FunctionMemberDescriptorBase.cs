@@ -135,13 +135,15 @@ namespace MoonSharp.Interpreter.Interop
 		protected virtual object[] BuildArgumentList(Script script, object obj, ScriptExecutionContext context, CallbackArguments args,
 			out List<int> outParams)
 		{
-			return BuildArgumentList(script, obj, context, args, new object[Parameters.Length], out outParams);
+			ulong lent;
+			return BuildArgumentList(script, obj, context, args, new object[Parameters.Length], out outParams, false, out lent);
 		}
 
 		// Fork: arguments for a call that are kept in the array given, which takes Parameters.Length of them
 		protected object[] BuildArgumentList(Script script, object obj, ScriptExecutionContext context, CallbackArguments args,
-			object[] pars, out List<int> outParams)
+			object[] pars, out List<int> outParams, bool lendBoxes, out ulong lent)
 		{
+			lent = 0;
 			ParameterDescriptor[] parameters = Parameters;
 
 			int j = args.IsMethodCall ? 1 : 0;
@@ -228,7 +230,13 @@ namespace MoonSharp.Interpreter.Interop
 				else
 				{
 					var arg = args.RawGet(j, false) ?? DynValue.Void;
-					pars[i] = ScriptToClrConversions.DynValueToObjectOfType(arg, parameters[i].Type,
+
+					// Fork: numbers and booleans for parameters of those types come in pooled boxes
+					var box = lendBoxes && i < 64 ? Converters.BoxPool.Lend(parameters[i].Type, arg) : null;
+					if (box != null)
+						lent |= 1UL << i;
+
+					pars[i] = box ?? ScriptToClrConversions.DynValueToObjectOfType(arg, parameters[i].Type,
 						parameters[i].DefaultValue, parameters[i].HasDefaultValue);
 					j += 1;
 				}
