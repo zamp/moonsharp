@@ -582,7 +582,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			CallStackItem cur = m_ExecutionStack.Peek();
 
 			cur.Debug_Symbols = i.SymbolList;
-			cur.LocalScope = new DynValue[i.NumVal];
+			cur.LocalScope = RentLocalScope(i.NumVal);
 
 			ClearBlockData(i);
 		}
@@ -705,41 +705,39 @@ namespace MoonSharp.Interpreter.Execution.VM
 				// args = DynValue.ExpandArgumentsToList(args);
 				SourceRef sref = GetCurrentSourceRef(instructionPtr);
 
-				m_ExecutionStack.Push(new CallStackItem()
-				{
-					ClrFunction = fn.Callback,
-					ReturnAddress = instructionPtr,
-					CallingSourceRef = sref,
-					BasePointer = -1,
-					ErrorHandler = handler,
-					Continuation = continuation,
-					ErrorHandlerBeforeUnwind = unwindHandler,
-					Flags = flags,
-				});
+				var clrFrame = RentCallStackItem();
+				clrFrame.ClrFunction = fn.Callback;
+				clrFrame.ReturnAddress = instructionPtr;
+				clrFrame.CallingSourceRef = sref;
+				clrFrame.BasePointer = -1;
+				clrFrame.ErrorHandler = handler;
+				clrFrame.Continuation = continuation;
+				clrFrame.ErrorHandlerBeforeUnwind = unwindHandler;
+				clrFrame.Flags = flags;
+				m_ExecutionStack.Push(clrFrame);
 
 				var ret = fn.Callback.Invoke(new ScriptExecutionContext(this, fn.Callback, sref), args, isMethodCall: thisCall);
 				m_ValueStack.RemoveLast(argsCount + 1);
 				m_ValueStack.Push(ret);
 
-				m_ExecutionStack.Pop();
+				Recycle(m_ExecutionStack.Pop());
 
 				return Internal_CheckForTailRequests(null, instructionPtr);
 			}
 			else if (fn.Type == DataType.Function)
 			{
 				m_ValueStack.Push(DynValue.NewNumber(argsCount));
-				m_ExecutionStack.Push(new CallStackItem()
-				{
-					BasePointer = m_ValueStack.Count,
-					ReturnAddress = instructionPtr,
-					Debug_EntryPoint = fn.Function.EntryPointByteCodeLocation,
-					CallingSourceRef = GetCurrentSourceRef(instructionPtr),
-					ClosureScope = fn.Function.ClosureContext,
-					ErrorHandler = handler,
-					Continuation = continuation,
-					ErrorHandlerBeforeUnwind = unwindHandler,
-					Flags = flags,
-				});
+				var frame = RentCallStackItem();
+				frame.BasePointer = m_ValueStack.Count;
+				frame.ReturnAddress = instructionPtr;
+				frame.Debug_EntryPoint = fn.Function.EntryPointByteCodeLocation;
+				frame.CallingSourceRef = GetCurrentSourceRef(instructionPtr);
+				frame.ClosureScope = fn.Function.ClosureContext;
+				frame.ErrorHandler = handler;
+				frame.Continuation = continuation;
+				frame.ErrorHandlerBeforeUnwind = unwindHandler;
+				frame.Flags = flags;
+				m_ExecutionStack.Push(frame);
 				return fn.Function.EntryPointByteCodeLocation;
 			}
 
@@ -774,6 +772,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			// perform a fake RET
 			CallStackItem csi = PopToBasePointer();
 			int retpoint = csi.ReturnAddress;
+			Recycle(csi);
 			var argscnt = (int)(m_ValueStack.Pop().Number);
 			m_ValueStack.RemoveLast(argscnt + 1);
 
@@ -819,6 +818,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 				m_ValueStack.Push(csi.Continuation.Invoke(new ScriptExecutionContext(this, csi.Continuation, i.SourceCodeRef),
 					new DynValue[1] { m_ValueStack.Pop() }));
 
+			Recycle(csi);
 			return retpoint;
 		}
 

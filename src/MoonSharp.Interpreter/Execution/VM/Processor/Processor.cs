@@ -12,6 +12,37 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 		FastStack<DynValue> m_ValueStack = new FastStack<DynValue>(131072);
 		FastStack<CallStackItem> m_ExecutionStack = new FastStack<CallStackItem>(131072);
+
+		// Fork: call frames and their local arrays are reused once their call returns
+		Stack<CallStackItem> m_CallStackItemPool = new Stack<CallStackItem>();
+		Dictionary<int, Stack<DynValue[]>> m_LocalScopePool = new Dictionary<int, Stack<DynValue[]>>();
+
+		private CallStackItem RentCallStackItem()
+		{
+			return m_CallStackItemPool.Count > 0 ? m_CallStackItemPool.Pop() : new CallStackItem();
+		}
+
+		private DynValue[] RentLocalScope(int length)
+		{
+			Stack<DynValue[]> pool;
+			return m_LocalScopePool.TryGetValue(length, out pool) && pool.Count > 0 ? pool.Pop() : new DynValue[length];
+		}
+
+		private void Recycle(CallStackItem csi)
+		{
+			var scope = csi.LocalScope;
+			if (scope != null)
+			{
+				Array.Clear(scope, 0, scope.Length);
+				Stack<DynValue[]> pool;
+				if (!m_LocalScopePool.TryGetValue(scope.Length, out pool))
+					m_LocalScopePool[scope.Length] = pool = new Stack<DynValue[]>();
+				pool.Push(scope);
+			}
+
+			csi.Reset();
+			m_CallStackItemPool.Push(csi);
+		}
 		List<Processor> m_CoroutinesStack;
 
 		Table m_GlobalTable;
@@ -96,15 +127,14 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			m_ValueStack.Push(DynValue.NewNumber(args.Length));  // func args count
 
-			m_ExecutionStack.Push(new CallStackItem()
-			{
-				BasePointer = m_ValueStack.Count,
-				Debug_EntryPoint = function.Function.EntryPointByteCodeLocation,
-				ReturnAddress = -1,
-				ClosureScope = function.Function.ClosureContext,
-				CallingSourceRef = SourceRef.GetClrLocation(),
-				Flags = flags
-			});
+			var csi = RentCallStackItem();
+			csi.BasePointer = m_ValueStack.Count;
+			csi.Debug_EntryPoint = function.Function.EntryPointByteCodeLocation;
+			csi.ReturnAddress = -1;
+			csi.ClosureScope = function.Function.ClosureContext;
+			csi.CallingSourceRef = SourceRef.GetClrLocation();
+			csi.Flags = flags;
+			m_ExecutionStack.Push(csi);
 
 			return function.Function.EntryPointByteCodeLocation;
 		}
