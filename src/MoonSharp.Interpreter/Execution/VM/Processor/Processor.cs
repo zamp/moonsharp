@@ -143,10 +143,19 @@ namespace MoonSharp.Interpreter.Execution.VM
 			else
 				m_ValueStack.Push(function);  // func val
 
-			args = Internal_AdjustTuple(args);
+			// Fork: arguments without a tuple to unpack are pushed as they are, with no adjusted copy made
+			if (args.Length > 0 && args[args.Length - 1].Type == DataType.Tuple)
+			{
+				args = Internal_AdjustTuple(args);
 
-			for (int i = 0; i < args.Length; i++)
-				m_ValueStack.Push(args[i]);
+				for (int i = 0; i < args.Length; i++)
+					m_ValueStack.Push(args[i]);
+			}
+			else
+			{
+				for (int i = 0; i < args.Length; i++)
+					m_ValueStack.Push(args[i].ToScalar());
+			}
 
 			m_ValueStack.Push(ArgCount(args.Length));  // func args count
 
