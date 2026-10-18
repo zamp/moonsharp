@@ -17,6 +17,29 @@ namespace MoonSharp.Interpreter.Execution.VM
 		Stack<CallStackItem> m_CallStackItemPool = new Stack<CallStackItem>();
 		Dictionary<int, Stack<DynValue[]>> m_LocalScopePool = new Dictionary<int, Stack<DynValue[]>>();
 
+		// Fork: what a call to an interop member is given, lent and taken back once it returns
+		Stack<Slice<DynValue>> m_ArgsSlicePool = new Stack<Slice<DynValue>>();
+		Stack<CallbackArguments> m_CallbackArgumentsPool = new Stack<CallbackArguments>();
+		Stack<ScriptExecutionContext> m_ContextPool = new Stack<ScriptExecutionContext>();
+
+		static readonly DynValue[] s_NoArgs = new DynValue[0];
+
+		// Fork: argument counts pushed under a call's arguments, read-only and shared
+		static readonly DynValue[] s_ArgCounts = MakeArgCounts();
+
+		static DynValue[] MakeArgCounts()
+		{
+			var counts = new DynValue[16];
+			for (int i = 0; i < counts.Length; i++)
+				counts[i] = DynValue.NewNumber(i).AsReadOnly();
+			return counts;
+		}
+
+		private static DynValue ArgCount(int count)
+		{
+			return count < s_ArgCounts.Length ? s_ArgCounts[count] : DynValue.NewNumber(count);
+		}
+
 		private CallStackItem RentCallStackItem()
 		{
 			return m_CallStackItemPool.Count > 0 ? m_CallStackItemPool.Pop() : new CallStackItem();
@@ -125,7 +148,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			for (int i = 0; i < args.Length; i++)
 				m_ValueStack.Push(args[i]);
 
-			m_ValueStack.Push(DynValue.NewNumber(args.Length));  // func args count
+			m_ValueStack.Push(ArgCount(args.Length));  // func args count
 
 			var csi = RentCallStackItem();
 			csi.BasePointer = m_ValueStack.Count;

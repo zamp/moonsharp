@@ -24,6 +24,7 @@ namespace MoonSharp.Interpreter.Interop
 				if (!byScript.TryGetValue(script, out value))
 				{
 					value = create(script, obj).AsReadOnly();
+					value.Callback.LendsCallData = true;
 					byScript.Add(script, value);
 				}
 			}

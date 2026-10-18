@@ -25,6 +25,10 @@ namespace MoonSharp.Interpreter
 		/// </value>
 		public Func<ScriptExecutionContext, CallbackArguments, DynValue> ClrCallback { get; private set; }
 
+		// Fork: a callback that keeps neither its context nor its arguments (an interop member's), so a call
+		// to it can lend them from the processor's pools
+		internal bool LendsCallData;
+
 		/// <summary>
 		/// Initializes a new instance of the <see cref="CallbackFunction" /> class.
 		/// </summary>
@@ -56,6 +60,23 @@ namespace MoonSharp.Interpreter
 			}
 
 			return ClrCallback(executionContext, new CallbackArguments(args, isMethodCall));
+		}
+
+		// Fork: Invoke with arguments lent by the processor
+		internal DynValue Invoke(ScriptExecutionContext executionContext, IList<DynValue> args, CallbackArguments lent, bool isMethodCall)
+		{
+			if (isMethodCall)
+			{
+				var colon = executionContext.GetScript().Options.ColonOperatorClrCallbackBehaviour;
+
+				if (colon == ColonOperatorBehaviour.TreatAsColon)
+					isMethodCall = false;
+				else if (colon == ColonOperatorBehaviour.TreatAsDotOnUserData)
+					isMethodCall = (args.Count > 0 && args[0].Type == DataType.UserData);
+			}
+
+			lent.Reset(args, isMethodCall);
+			return ClrCallback(executionContext, lent);
 		}
 
 		/// <summary>

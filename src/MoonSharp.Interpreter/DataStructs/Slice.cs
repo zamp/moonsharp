@@ -24,6 +24,12 @@ namespace MoonSharp.Interpreter.DataStructs
 		/// <param name="reversed">if set to <c>true</c> the view is in reversed order.</param>
 		public Slice(IList<T> list, int from, int length, bool reversed)
 		{
+			Reset(list, from, length, reversed);
+		}
+
+		// Fork: reused for arguments to interop members
+		internal void Reset(IList<T> list, int from, int length, bool reversed)
+		{
 			m_SourceList = list;
 			m_From = from;
 			m_Length = length;

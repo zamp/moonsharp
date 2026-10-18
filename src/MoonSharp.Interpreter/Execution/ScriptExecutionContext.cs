@@ -15,6 +15,12 @@ namespace MoonSharp.Interpreter
 
 		internal ScriptExecutionContext(Processor p, CallbackFunction callBackFunction, SourceRef sourceRef, bool isDynamic = false)
 		{
+			Reset(p, callBackFunction, sourceRef, isDynamic);
+		}
+
+		// Fork: reused for calls to interop members
+		internal void Reset(Processor p, CallbackFunction callBackFunction, SourceRef sourceRef, bool isDynamic = false)
+		{
 			IsDynamicExecution = isDynamic;
 			m_Processor = p;
 			m_Callback = callBackFunction;

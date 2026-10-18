@@ -356,10 +356,12 @@ namespace MoonSharp.Interpreter.Execution.VM
 			var stackframe = m_ExecutionStack.Peek();
 
 			DynValue v = stackframe.LocalScope[symref.i_Index];
-			if (v == null)
-				stackframe.LocalScope[symref.i_Index] = v = DynValue.NewNil();
 
-			v.Assign(value);
+			// Fork: a fresh local gets its own copy straight away, not a nil it is then copied into
+			if (v == null)
+				stackframe.LocalScope[symref.i_Index] = value.CloneAsWritable();
+			else
+				v.Assign(value);
 		}
 
 		private void ExecStoreLcl(Instruction i)
@@ -606,7 +608,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 		private IList<DynValue> CreateArgsListForFunctionCall(int numargs, int offsFromTop)
 		{
-			if (numargs == 0) return new DynValue[0];
+			if (numargs == 0) return s_NoArgs;
 
 			DynValue lastParam = m_ValueStack.Peek(offsFromTop);
 
@@ -632,6 +634,13 @@ namespace MoonSharp.Interpreter.Execution.VM
 		private void ExecArgs(Instruction I)
 		{
 			int numargs = (int)m_ValueStack.Peek(0).Number;
+
+			// Fork: arguments without a tuple to unpack are read off the stack, with no list made for them
+			if (!EndsInTuple(numargs, 1))
+			{
+				ExecArgsFromStack(I, numargs);
+				return;
+			}
 
 			// unpacks last tuple arguments to simplify a lot of code down under
 			var argsList = CreateArgsListForFunctionCall(numargs, 1);
@@ -663,6 +672,36 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 
 
+
+		// Fork: ExecArgs for arguments that are all on the stack (no trailing tuple); AssignLocal copies each
+		private void ExecArgsFromStack(Instruction I, int numargs)
+		{
+			int first = m_ValueStack.Count - numargs - 1;
+
+			for (int i = 0; i < I.SymbolList.Length; i++)
+			{
+				if (i >= numargs)
+				{
+					this.AssignLocal(I.SymbolList[i], DynValue.Nil);
+				}
+				else if ((i == I.SymbolList.Length - 1) && (I.SymbolList[i].i_Name == WellKnownSymbols.VARARGS))
+				{
+					int len = numargs - i;
+					DynValue[] varargs = new DynValue[len];
+
+					for (int ii = 0; ii < len; ii++, i++)
+					{
+						varargs[ii] = m_ValueStack[first + i].ToScalar().CloneAsWritable();
+					}
+
+					this.AssignLocal(I.SymbolList[I.SymbolList.Length - 1], DynValue.NewTuple(Internal_AdjustTuple(varargs)));
+				}
+				else
+				{
+					this.AssignLocal(I.SymbolList[i], m_ValueStack[first + i].ToScalar());
+				}
+			}
+		}
 
 		private int Internal_ExecCall(int argsCount, int instructionPtr, CallbackFunction handler = null,
 			CallbackFunction continuation = null, bool thisCall = false, string debugText = null, DynValue unwindHandler = null)
@@ -697,6 +736,9 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 
 
+			if (fn.Type == DataType.ClrFunction && fn.Callback.LendsCallData && !EndsInTuple(argsCount, 0))
+				return CallLendingCallData(fn, argsCount, instructionPtr, handler, continuation, thisCall, unwindHandler, flags);
+
 			if (fn.Type == DataType.ClrFunction)
 			{
 				//IList<DynValue> args = new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - argsCount, argsCount, false);
@@ -726,7 +768,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			}
 			else if (fn.Type == DataType.Function)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(argsCount));
+				m_ValueStack.Push(ArgCount(argsCount));
 				var frame = RentCallStackItem();
 				frame.BasePointer = m_ValueStack.Count;
 				frame.ReturnAddress = instructionPtr;
@@ -759,6 +801,52 @@ namespace MoonSharp.Interpreter.Execution.VM
 			}
 
 			throw ScriptRuntimeException.AttemptToCallNonFunc(fn.Type, debugText);
+		}
+
+		// Fork: whether a call's last argument is a tuple to unpack
+		private bool EndsInTuple(int numargs, int offsFromTop)
+		{
+			if (numargs == 0)
+				return false;
+
+			DynValue lastParam = m_ValueStack.Peek(offsFromTop);
+			return lastParam.Type == DataType.Tuple && lastParam.Tuple.Length > 1;
+		}
+
+		// Fork: a call to an interop member, its arguments, context and frame lent from the pools
+		private int CallLendingCallData(DynValue fn, int argsCount, int instructionPtr, CallbackFunction handler, CallbackFunction continuation, bool thisCall, DynValue unwindHandler, CallStackItemFlags flags)
+		{
+			var args = m_ArgsSlicePool.Count > 0 ? m_ArgsSlicePool.Pop() : new Slice<DynValue>(m_ValueStack, 0, 0, false);
+			args.Reset(m_ValueStack, m_ValueStack.Count - argsCount, argsCount, false);
+			var arguments = m_CallbackArgumentsPool.Count > 0 ? m_CallbackArgumentsPool.Pop() : new CallbackArguments(s_NoArgs, false);
+			SourceRef sref = GetCurrentSourceRef(instructionPtr);
+			var context = m_ContextPool.Count > 0 ? m_ContextPool.Pop() : new ScriptExecutionContext(this, fn.Callback, sref);
+			context.Reset(this, fn.Callback, sref);
+
+			var clrFrame = RentCallStackItem();
+			clrFrame.ClrFunction = fn.Callback;
+			clrFrame.ReturnAddress = instructionPtr;
+			clrFrame.CallingSourceRef = sref;
+			clrFrame.BasePointer = -1;
+			clrFrame.ErrorHandler = handler;
+			clrFrame.Continuation = continuation;
+			clrFrame.ErrorHandlerBeforeUnwind = unwindHandler;
+			clrFrame.Flags = flags;
+			m_ExecutionStack.Push(clrFrame);
+
+			var ret = fn.Callback.Invoke(context, args, arguments, thisCall);
+			m_ValueStack.RemoveLast(argsCount + 1);
+			m_ValueStack.Push(ret);
+
+			Recycle(m_ExecutionStack.Pop());
+			args.Reset(null, 0, 0, false);
+			m_ArgsSlicePool.Push(args);
+			arguments.Reset(s_NoArgs, false);
+			m_CallbackArgumentsPool.Push(arguments);
+			context.Reset(null, null, null);
+			m_ContextPool.Push(context);
+
+			return Internal_CheckForTailRequests(null, instructionPtr);
 		}
 
 		private int PerformTCO(int instructionPtr, int argsCount)

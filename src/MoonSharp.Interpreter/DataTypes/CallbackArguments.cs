@@ -19,7 +19,14 @@ namespace MoonSharp.Interpreter
 		/// <param name="isMethodCall">if set to <c>true</c> [is method call].</param>
 		public CallbackArguments(IList<DynValue> args, bool isMethodCall)
 		{
+			Reset(args, isMethodCall);
+		}
+
+		// Fork: reused for calls to interop members
+		internal void Reset(IList<DynValue> args, bool isMethodCall)
+		{
 			m_Args = args;
+			m_LastIsTuple = false;
 
 			if (m_Args.Count > 0)
 			{

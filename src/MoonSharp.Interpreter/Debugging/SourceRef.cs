@@ -46,9 +46,12 @@ namespace MoonSharp.Interpreter.Debugging
 		/// </summary>
 		public bool CannotBreakpoint { get; private set; }
 
+		// Fork: one shared CLR location rather than a new one for every call from C#
+		static readonly SourceRef s_ClrLocation = new SourceRef(0, 0, 0, 0, 0, false) { IsClrLocation = true };
+
 		internal static SourceRef GetClrLocation()
 		{
-			return new SourceRef(0, 0, 0, 0, 0, false) { IsClrLocation = true };
+			return s_ClrLocation;
 		}
 
 		public SourceRef(SourceRef src, bool isStepStop)
