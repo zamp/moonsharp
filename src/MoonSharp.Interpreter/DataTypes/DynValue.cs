@@ -107,6 +107,12 @@ namespace MoonSharp.Interpreter
 		/// <summary>
 		/// Creates a new writable value initialized to the specified number.
 		/// </summary>
+		// Fork: the shared read-only True or False, for values that are never assigned into
+		internal static DynValue FromBool(bool v)
+		{
+			return v ? True : False;
+		}
+
 		public static DynValue NewNumber(double num)
 		{
 			return new DynValue()

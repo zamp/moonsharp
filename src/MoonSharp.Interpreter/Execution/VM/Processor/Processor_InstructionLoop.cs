@@ -159,7 +159,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 							ExecBeginFn(i);
 							break;
 						case OpCode.ToBool:
-							m_ValueStack.Push(DynValue.NewBoolean(m_ValueStack.Pop().ToScalar().CastToBool()));
+							m_ValueStack.Push(DynValue.FromBool(m_ValueStack.Pop().ToScalar().CastToBool()));
 							break;
 						case OpCode.Args:
 							ExecArgs(i);
@@ -568,15 +568,15 @@ namespace MoonSharp.Interpreter.Execution.VM
 				throw new InternalErrorException("CNOT had non-bool arg");
 
 			if (not.CastToBool())
-				m_ValueStack.Push(DynValue.NewBoolean(!(v.CastToBool())));
+				m_ValueStack.Push(DynValue.FromBool(!(v.CastToBool())));
 			else
-				m_ValueStack.Push(DynValue.NewBoolean(v.CastToBool()));
+				m_ValueStack.Push(DynValue.FromBool(v.CastToBool()));
 		}
 
 		private void ExecNot(Instruction i)
 		{
 			DynValue v = m_ValueStack.Pop().ToScalar();
-			m_ValueStack.Push(DynValue.NewBoolean(!(v.CastToBool())));
+			m_ValueStack.Push(DynValue.FromBool(!(v.CastToBool())));
 		}
 
 		private void ExecBeginFn(Instruction i)
@@ -1155,7 +1155,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			}
 
 			// else perform standard comparison
-			m_ValueStack.Push(DynValue.NewBoolean(r.Equals(l)));
+			m_ValueStack.Push(DynValue.FromBool(r.Equals(l)));
 			return instructionPtr;
 		}
 
@@ -1166,11 +1166,11 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (l.Type == DataType.Number && r.Type == DataType.Number)
 			{
-				m_ValueStack.Push(DynValue.NewBoolean(l.Number < r.Number));
+				m_ValueStack.Push(DynValue.FromBool(l.Number < r.Number));
 			}
 			else if (l.Type == DataType.String && r.Type == DataType.String)
 			{
-				m_ValueStack.Push(DynValue.NewBoolean(l.String.CompareTo(r.String) < 0));
+				m_ValueStack.Push(DynValue.FromBool(l.String.CompareTo(r.String) < 0));
 			}
 			else
 			{
@@ -1193,12 +1193,12 @@ namespace MoonSharp.Interpreter.Execution.VM
 			if (l.Type == DataType.Number && r.Type == DataType.Number)
 			{
 				m_ValueStack.Push(DynValue.False);
-				m_ValueStack.Push(DynValue.NewBoolean(l.Number <= r.Number));
+				m_ValueStack.Push(DynValue.FromBool(l.Number <= r.Number));
 			}
 			else if (l.Type == DataType.String && r.Type == DataType.String)
 			{
 				m_ValueStack.Push(DynValue.False);
-				m_ValueStack.Push(DynValue.NewBoolean(l.String.CompareTo(r.String) <= 0));
+				m_ValueStack.Push(DynValue.FromBool(l.String.CompareTo(r.String) <= 0));
 			}
 			else
 			{

@@ -12,6 +12,15 @@ namespace MoonSharp.Interpreter.Interop.Converters
 		/// Skips on custom conversions, etc.
 		/// Does NOT throw on failure.
 		/// </summary>
+		// Fork: a C# string's value made once while the string lives, read-only and shared
+		static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, DynValue> s_Strings = new System.Runtime.CompilerServices.ConditionalWeakTable<string, DynValue>();
+		static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, DynValue>.CreateValueCallback s_NewString = str => DynValue.NewString(str).AsReadOnly();
+
+		static DynValue StringValue(string str)
+		{
+			return s_Strings.GetValue(str, s_NewString);
+		}
+
 		internal static DynValue TryObjectToTrivialDynValue(Script script, object obj)
 		{
 			if (obj == null)
@@ -23,9 +32,12 @@ namespace MoonSharp.Interpreter.Interop.Converters
 			Type t = obj.GetType();
 
 			if (obj is bool)
-				return DynValue.NewBoolean((bool)obj);
+				return DynValue.FromBool((bool)obj); // Fork: shared read-only booleans
 
-			if (obj is string || obj is StringBuilder || obj is char)
+			if (obj is string)
+				return StringValue((string)obj);
+
+			if (obj is StringBuilder || obj is char)
 				return DynValue.NewString(obj.ToString());
 
 			if (NumericConversions.NumericTypes.Contains(t))
@@ -62,9 +74,12 @@ namespace MoonSharp.Interpreter.Interop.Converters
 			Type t = obj.GetType();
 
 			if (obj is bool)
-				return DynValue.NewBoolean((bool)obj);
+				return DynValue.FromBool((bool)obj); // Fork: shared read-only booleans
 
-			if (obj is string || obj is StringBuilder || obj is char)
+			if (obj is string)
+				return StringValue((string)obj);
+
+			if (obj is StringBuilder || obj is char)
 				return DynValue.NewString(obj.ToString());
 
 			if (obj is Closure)
