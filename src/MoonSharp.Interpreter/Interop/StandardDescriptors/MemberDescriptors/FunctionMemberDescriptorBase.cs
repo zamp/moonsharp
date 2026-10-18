@@ -135,9 +135,14 @@ namespace MoonSharp.Interpreter.Interop
 		protected virtual object[] BuildArgumentList(Script script, object obj, ScriptExecutionContext context, CallbackArguments args,
 			out List<int> outParams)
 		{
-			ParameterDescriptor[] parameters = Parameters;
+			return BuildArgumentList(script, obj, context, args, new object[Parameters.Length], out outParams);
+		}
 
-			object[] pars = new object[parameters.Length];
+		// Fork: arguments for a call that are kept in the array given, which takes Parameters.Length of them
+		protected object[] BuildArgumentList(Script script, object obj, ScriptExecutionContext context, CallbackArguments args,
+			object[] pars, out List<int> outParams)
+		{
+			ParameterDescriptor[] parameters = Parameters;
 
 			int j = args.IsMethodCall ? 1 : 0;
 

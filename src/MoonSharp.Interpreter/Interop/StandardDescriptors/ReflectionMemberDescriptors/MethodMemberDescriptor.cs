@@ -183,7 +183,16 @@ namespace MoonSharp.Interpreter.Interop
 				((IOptimizableDescriptor)this).Optimize();
 
 			List<int> outParams = null;
-			object[] pars = base.BuildArgumentList(script, obj, context, args, out outParams);
+
+			// Fork: the argument array is lent from this member's pool (a stack, for calls made from inside a
+			// call), and taken back once the return value is built; descriptors are shared, so it is locked
+			object[] pars = null;
+			lock (m_ArgumentArrays)
+				if (m_ArgumentArrays.Count > 0)
+					pars = m_ArgumentArrays.Pop();
+			if (pars == null)
+				pars = new object[Parameters.Length];
+			base.BuildArgumentList(script, obj, context, args, pars, out outParams);
 			object retv = null;
 
 			if (m_OptimizedFunc != null)
@@ -208,8 +217,14 @@ namespace MoonSharp.Interpreter.Interop
 					retv = MethodInfo.Invoke(obj, pars);
 			}
 
-			return BuildReturnValue(script, outParams, pars, retv);
+			var result = BuildReturnValue(script, outParams, pars, retv);
+			Array.Clear(pars, 0, pars.Length);
+			lock (m_ArgumentArrays)
+				m_ArgumentArrays.Push(pars);
+			return result;
 		}
+
+		private readonly Stack<object[]> m_ArgumentArrays = new Stack<object[]>();
 
 		/// <summary>
 		/// Called by standard descriptors when background optimization or preoptimization needs to be performed.
