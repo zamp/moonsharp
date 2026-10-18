@@ -64,10 +64,12 @@ namespace MoonSharp.Interpreter.Execution.VM
 						var stackframe = GetTopNonClrFunction();
 
 						DynValue v = stackframe.LocalScope[symref.i_Index];
-						if (v == null)
-							stackframe.LocalScope[symref.i_Index] = v = DynValue.NewNil();
 
-						v.Assign(value);
+						// Fork: as AssignLocal, an uncaptured local holds a read-only value swapped on store
+						if (v == null || v.ReadOnly)
+							stackframe.LocalScope[symref.i_Index] = value.CloneAsWritable().MakeReadOnly();
+						else
+							v.Assign(value);
 					}
 					break;
 				case SymbolRefType.Upvalue:

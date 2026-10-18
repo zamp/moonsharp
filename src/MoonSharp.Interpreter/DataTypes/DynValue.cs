@@ -382,6 +382,13 @@ namespace MoonSharp.Interpreter
 		/// <summary>
 		/// Returns this value as readonly - eventually cloning it in the process if it isn't readonly to start with.
 		/// </summary>
+		// Fork: makes a value read-only in place, for a value only the caller holds on to (see AssignLocal)
+		internal DynValue MakeReadOnly()
+		{
+			m_ReadOnly = true;
+			return this;
+		}
+
 		public DynValue AsReadOnly()
 		{
 			if (ReadOnly)

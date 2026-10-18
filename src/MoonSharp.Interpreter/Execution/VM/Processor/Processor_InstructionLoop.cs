@@ -357,9 +357,10 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			DynValue v = stackframe.LocalScope[symref.i_Index];
 
-			// Fork: a fresh local gets its own copy straight away, not a nil it is then copied into
-			if (v == null)
-				stackframe.LocalScope[symref.i_Index] = value.CloneAsWritable();
+			// Fork: a local no closure has captured holds a read-only value, swapped on each store, so storing
+			// and reading it copy nothing; one a closure shares is assigned into as before
+			if (v == null || v.ReadOnly)
+				stackframe.LocalScope[symref.i_Index] = value.MakeReadOnly();
 			else
 				v.Assign(value);
 		}
@@ -424,7 +425,14 @@ namespace MoonSharp.Interpreter.Execution.VM
 		private DynValue GetUpvalueSymbol(SymbolRef s)
 		{
 			if (s.Type == SymbolRefType.Local)
-				return m_ExecutionStack.Peek().LocalScope[s.i_Index];
+			{
+				// Fork: a closure shares the local from now on, so it gets a value of its own to assign into
+				var scope = m_ExecutionStack.Peek().LocalScope;
+				var v = scope[s.i_Index];
+				if (v != null && v.ReadOnly)
+					scope[s.i_Index] = v = v.CloneAsWritable();
+				return v;
+			}
 			else if (s.Type == SymbolRefType.Upvalue)
 				return m_ExecutionStack.Peek().ClosureScope[s.i_Index];
 			else
