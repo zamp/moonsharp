@@ -14,6 +14,10 @@ namespace MoonSharp.Interpreter.Interop
 	/// </summary>
 	public class OverloadedMethodMemberDescriptor : IOptimizableDescriptor, IMemberDescriptor, IWireableDescriptor
 	{
+		// Fork: callbacks made once per object and script
+		private readonly CallbackCache m_Callbacks = new CallbackCache();
+		private Func<Script, object, DynValue> m_CreateCallback;
+
 		/// <summary>
 		/// Comparer class for IOverloadableMemberDescriptor
 		/// </summary>
@@ -470,7 +474,7 @@ namespace MoonSharp.Interpreter.Interop
 		/// </returns>
 		public DynValue GetValue(Script script, object obj)
 		{
-			return DynValue.NewCallback(this.GetCallbackFunction(script, obj));
+			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => DynValue.NewCallback(this.GetCallbackFunction(s, o))));
 		}
 
 		/// <summary>

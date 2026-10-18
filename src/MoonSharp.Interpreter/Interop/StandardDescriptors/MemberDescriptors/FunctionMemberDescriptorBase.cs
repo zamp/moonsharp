@@ -13,6 +13,10 @@ namespace MoonSharp.Interpreter.Interop
 	/// </summary>
 	public abstract class FunctionMemberDescriptorBase : IOverloadableMemberDescriptor
 	{
+		// Fork: callbacks made once per object and script
+		private readonly CallbackCache m_Callbacks = new CallbackCache();
+		private Func<Script, object, DynValue> m_CreateCallback;
+
 		/// <summary>
 		/// Gets a value indicating whether the described method is static.
 		/// </summary>
@@ -288,7 +292,7 @@ namespace MoonSharp.Interpreter.Interop
 		public virtual DynValue GetValue(Script script, object obj)
 		{
 			this.CheckAccess(MemberDescriptorAccess.CanRead, obj);
-			return this.GetCallbackAsDynValue(script, obj);
+			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => this.GetCallbackAsDynValue(s, o)));
 		}
 
 		/// <summary>
