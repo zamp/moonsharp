@@ -29,6 +29,10 @@ namespace MoonSharp.Interpreter
 		// to it can lend them from the processor's pools
 		internal bool LendsCallData;
 
+		// Fork: a callback whose parameters can't hold on to a DynValue (no DynValue, array of them or
+		// CallbackArguments), so scratch numbers passed to it can be reused once it returns
+		internal bool KeepsNoArguments;
+
 		/// <summary>
 		/// Initializes a new instance of the <see cref="CallbackFunction" /> class.
 		/// </summary>

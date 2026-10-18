@@ -51,10 +51,12 @@ namespace MoonSharp.Interpreter.Execution.VM
 						case OpCode.Meta:
 							break;
 						case OpCode.Pop:
+							for (int p = 0; p < i.NumVal; p++)
+								FreeScratch(m_ValueStack.Peek(p), null);
 							m_ValueStack.RemoveLast(i.NumVal);
 							break;
 						case OpCode.Copy:
-							m_ValueStack.Push(m_ValueStack.Peek(i.NumVal));
+							m_ValueStack.Push(KeepScratch(m_ValueStack.Peek(i.NumVal)));
 							break;
 						case OpCode.Swap:
 							ExecSwap(i);
@@ -147,6 +149,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 							if (instructionPtr == YIELD_SPECIAL_TRAP) goto yield_to_calling_coroutine;
 							break;
 						case OpCode.MkTuple:
+							KeepFrameScratch();
 							ExecMkTuple(i);
 							break;
 						case OpCode.Clean:
@@ -187,12 +190,15 @@ namespace MoonSharp.Interpreter.Execution.VM
 								m_ValueStack.Push(DynValue.NewPrimeTable());
 							break;
 						case OpCode.IterPrep:
+							KeepFrameScratch();
 							ExecIterPrep(i);
 							break;
 						case OpCode.IterUpd:
+							KeepFrameScratch();
 							ExecIterUpd(i);
 							break;
 						case OpCode.ExpTuple:
+							KeepFrameScratch();
 							ExecExpTuple(i);
 							break;
 						case OpCode.Local:
@@ -210,9 +216,11 @@ namespace MoonSharp.Interpreter.Execution.VM
 							ExecStoreLcl(i);
 							break;
 						case OpCode.TblInitN:
+							KeepFrameScratch();
 							ExecTblInitN(i);
 							break;
 						case OpCode.TblInitI:
+							KeepFrameScratch();
 							ExecTblInitI(i);
 							break;
 						case OpCode.Index:
@@ -224,6 +232,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 						case OpCode.IndexSet:
 						case OpCode.IndexSetN:
 						case OpCode.IndexSetL:
+							KeepFrameScratch();
 							instructionPtr = ExecIndexSet(i, instructionPtr);
 							if (instructionPtr == YIELD_SPECIAL_TRAP) goto yield_to_calling_coroutine;
 							break;
@@ -310,7 +319,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			}
 
 		return_to_native_code:
-			return m_ValueStack.Pop();
+			return KeepScratch(m_ValueStack.Pop());
 
 
 		}
@@ -749,6 +758,8 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (fn.Type == DataType.ClrFunction)
 			{
+				KeepScratch(argsCount);
+
 				//IList<DynValue> args = new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - argsCount, argsCount, false);
 				IList<DynValue> args = CreateArgsListForFunctionCall(argsCount, 0);
 				// we expand tuples before callbacks
@@ -811,6 +822,65 @@ namespace MoonSharp.Interpreter.Execution.VM
 			throw ScriptRuntimeException.AttemptToCallNonFunc(fn.Type, debugText);
 		}
 
+		// Fork: an arithmetic result written into a scratch operand (the other goes back to the free list) or a
+		// free scratch number, so arithmetic on values that stay on the stack allocates nothing
+		private DynValue ScratchNumber(double num, DynValue a, DynValue b)
+		{
+			DynValue v;
+
+			if (a.IsScratch)
+			{
+				v = a;
+				if (b != null && !object.ReferenceEquals(a, b))
+					FreeScratch(b, null);
+			}
+			else if (b != null && b.IsScratch)
+			{
+				v = b;
+			}
+			else
+			{
+				v = m_FreeScratch.Count > 0 ? m_FreeScratch.Pop() : DynValue.NewScratch();
+			}
+
+			v.SetScratchNumber(num);
+			return v;
+		}
+
+		// Fork: consumed scratch numbers go back to the free list
+		private void FreeScratch(DynValue a, DynValue b)
+		{
+			if (a != null && a.IsScratch && m_FreeScratch.Count < MAX_FREE_SCRATCH)
+				m_FreeScratch.Push(a);
+
+			if (b != null && !object.ReferenceEquals(a, b) && b.IsScratch && m_FreeScratch.Count < MAX_FREE_SCRATCH)
+				m_FreeScratch.Push(b);
+		}
+
+		// Fork: a scratch number leaving the stack for somewhere that keeps it stops being scratch
+		private DynValue KeepScratch(DynValue v)
+		{
+			if (v != null && v.IsScratch)
+				v.MakeReadOnly();
+
+			return v;
+		}
+
+		private void KeepScratch(int count)
+		{
+			for (int k = 0; k < count; k++)
+				KeepScratch(m_ValueStack.Peek(k));
+		}
+
+		// Fork: before an op that may keep values from the stack (tables, tuples, iterators), every scratch
+		// number of the running function stops being scratch
+		private void KeepFrameScratch()
+		{
+			int from = m_ExecutionStack.Count > 0 ? Math.Max(0, m_ExecutionStack.Peek().BasePointer) : 0;
+			for (int k = from; k < m_ValueStack.Count; k++)
+				KeepScratch(m_ValueStack[k]);
+		}
+
 		// Fork: whether a call's last argument is a tuple to unpack
 		private bool EndsInTuple(int numargs, int offsFromTop)
 		{
@@ -842,7 +912,15 @@ namespace MoonSharp.Interpreter.Execution.VM
 			clrFrame.Flags = flags;
 			m_ExecutionStack.Push(clrFrame);
 
+			if (!fn.Callback.KeepsNoArguments)
+				KeepScratch(argsCount);
+
 			var ret = fn.Callback.Invoke(context, args, arguments, thisCall);
+
+			if (fn.Callback.KeepsNoArguments)
+				for (int a = 0; a < argsCount; a++)
+					FreeScratch(m_ValueStack.Peek(a), null);
+
 			m_ValueStack.RemoveLast(argsCount + 1);
 			m_ValueStack.Push(ret);
 
@@ -912,7 +990,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (csi.Continuation != null)
 				m_ValueStack.Push(csi.Continuation.Invoke(new ScriptExecutionContext(this, csi.Continuation, i.SourceCodeRef),
-					new DynValue[1] { m_ValueStack.Pop() }));
+					new DynValue[1] { KeepScratch(m_ValueStack.Pop()) }));
 
 			Recycle(csi);
 			return retpoint;
@@ -952,6 +1030,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 		private int JumpBool(Instruction i, bool expectedValueForJump, int instructionPtr)
 		{
 			DynValue op = m_ValueStack.Pop().ToScalar();
+			FreeScratch(op, null);
 
 			if (op.CastToBool() == expectedValueForJump)
 				return i.NumVal;
@@ -987,7 +1066,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (ln.HasValue && rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(ln.Value + rn.Value));
+				m_ValueStack.Push(ScratchNumber(ln.Value + rn.Value, l, r));
 				return instructionPtr;
 			}
 			else
@@ -1008,7 +1087,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (ln.HasValue && rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(ln.Value - rn.Value));
+				m_ValueStack.Push(ScratchNumber(ln.Value - rn.Value, l, r));
 				return instructionPtr;
 			}
 			else
@@ -1030,7 +1109,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (ln.HasValue && rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(ln.Value * rn.Value));
+				m_ValueStack.Push(ScratchNumber(ln.Value * rn.Value, l, r));
 				return instructionPtr;
 			}
 			else
@@ -1053,7 +1132,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			{
 				double mod = Math.IEEERemainder(ln.Value, rn.Value);
 				if (mod < 0) mod += rn.Value;
-				m_ValueStack.Push(DynValue.NewNumber(mod));
+				m_ValueStack.Push(ScratchNumber(mod, l, r));
 				return instructionPtr;
 			}
 			else
@@ -1074,7 +1153,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (ln.HasValue && rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(ln.Value / rn.Value));
+				m_ValueStack.Push(ScratchNumber(ln.Value / rn.Value, l, r));
 				return instructionPtr;
 			}
 			else
@@ -1094,7 +1173,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (ln.HasValue && rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(Math.Pow(ln.Value, rn.Value)));
+				m_ValueStack.Push(ScratchNumber(Math.Pow(ln.Value, rn.Value), l, r));
 				return instructionPtr;
 			}
 			else
@@ -1113,7 +1192,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			if (rn.HasValue)
 			{
-				m_ValueStack.Push(DynValue.NewNumber(-rn.Value));
+				m_ValueStack.Push(ScratchNumber(-rn.Value, r, null));
 				return instructionPtr;
 			}
 			else
@@ -1164,6 +1243,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 			// else perform standard comparison
 			m_ValueStack.Push(DynValue.FromBool(r.Equals(l)));
+			FreeScratch(l, r);
 			return instructionPtr;
 		}
 
@@ -1175,6 +1255,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			if (l.Type == DataType.Number && r.Type == DataType.Number)
 			{
 				m_ValueStack.Push(DynValue.FromBool(l.Number < r.Number));
+				FreeScratch(l, r);
 			}
 			else if (l.Type == DataType.String && r.Type == DataType.String)
 			{
@@ -1202,6 +1283,7 @@ namespace MoonSharp.Interpreter.Execution.VM
 			{
 				m_ValueStack.Push(DynValue.False);
 				m_ValueStack.Push(DynValue.FromBool(l.Number <= r.Number));
+				FreeScratch(l, r);
 			}
 			else if (l.Type == DataType.String && r.Type == DataType.String)
 			{

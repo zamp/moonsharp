@@ -16,6 +16,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<Compile Include="Program.cs" />
+		<Compile Include="ScratchNumberTests.cs" />
 		<Compile Include="../../src/MoonSharp.Interpreter.Tests/**/*.cs" Exclude="../../src/MoonSharp.Interpreter.Tests/_Projects/**" />
 		<None Include="../../src/MoonSharp.Interpreter.Tests/TestMore/**/*.t;../../src/MoonSharp.Interpreter.Tests/TestMore/**/*.lua" LinkBase="TestMore" CopyToOutputDirectory="PreserveNewest" />
 		<ProjectReference Include="../MoonSharp.Interpreter.csproj" />

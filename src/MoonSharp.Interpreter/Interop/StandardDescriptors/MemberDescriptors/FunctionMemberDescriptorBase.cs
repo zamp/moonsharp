@@ -297,7 +297,7 @@ namespace MoonSharp.Interpreter.Interop
 		public virtual DynValue GetValue(Script script, object obj)
 		{
 			this.CheckAccess(MemberDescriptorAccess.CanRead, obj);
-			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => this.GetCallbackAsDynValue(s, o)));
+			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => this.GetCallbackAsDynValue(s, o)), CallbackCache.KeepsNoArguments(Parameters));
 		}
 
 		/// <summary>

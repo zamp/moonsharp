@@ -24,6 +24,10 @@ namespace MoonSharp.Interpreter.Execution.VM
 
 		static readonly DynValue[] s_NoArgs = new DynValue[0];
 
+		// Fork: scratch numbers consumed and ready for the next arithmetic result
+		const int MAX_FREE_SCRATCH = 256;
+		Stack<DynValue> m_FreeScratch = new Stack<DynValue>();
+
 		// Fork: argument counts pushed under a call's arguments, read-only and shared
 		static readonly DynValue[] s_ArgCounts = MakeArgCounts();
 

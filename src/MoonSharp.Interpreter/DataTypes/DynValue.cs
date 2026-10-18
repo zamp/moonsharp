@@ -382,6 +382,27 @@ namespace MoonSharp.Interpreter
 		/// <summary>
 		/// Returns this value as readonly - eventually cloning it in the process if it isn't readonly to start with.
 		/// </summary>
+		// Fork: a scratch number is an arithmetic result the processor owns; while it is only on the value
+		// stack (not read-only) the next arithmetic may write its result into it, and once consumed it goes back to the
+		// processor's free list. Storing it anywhere else makes it read-only first.
+		internal bool m_Scratch;
+
+		internal bool IsScratch
+		{
+			get { return m_Scratch && !m_ReadOnly; }
+		}
+
+		internal static DynValue NewScratch()
+		{
+			return new DynValue() { m_Type = DataType.Number, m_Scratch = true };
+		}
+
+		internal void SetScratchNumber(double num)
+		{
+			m_Number = num;
+			m_HashCode = -1;
+		}
+
 		// Fork: makes a value read-only in place, for a value only the caller holds on to (see AssignLocal)
 		internal DynValue MakeReadOnly()
 		{

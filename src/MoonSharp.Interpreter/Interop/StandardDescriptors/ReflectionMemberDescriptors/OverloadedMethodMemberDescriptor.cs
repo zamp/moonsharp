@@ -16,6 +16,19 @@ namespace MoonSharp.Interpreter.Interop
 	{
 		// Fork: callbacks made once per object and script
 		private readonly CallbackCache m_Callbacks = new CallbackCache();
+
+		// Fork: whether no overload can hold on to a DynValue it is passed
+		private bool KeepsNoArguments()
+		{
+			if (m_ExtOverloads.Count > 0)
+				return false;
+
+			foreach (var overload in m_Overloads)
+				if (!CallbackCache.KeepsNoArguments(overload.Parameters))
+					return false;
+
+			return true;
+		}
 		private Func<Script, object, DynValue> m_CreateCallback;
 
 		/// <summary>
@@ -474,7 +487,7 @@ namespace MoonSharp.Interpreter.Interop
 		/// </returns>
 		public DynValue GetValue(Script script, object obj)
 		{
-			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => DynValue.NewCallback(this.GetCallbackFunction(s, o))));
+			return m_Callbacks.Get(script, obj, m_CreateCallback ?? (m_CreateCallback = (s, o) => DynValue.NewCallback(this.GetCallbackFunction(s, o))), KeepsNoArguments());
 		}
 
 		/// <summary>
