@@ -1483,9 +1483,11 @@ namespace MoonSharp.Interpreter.Execution.VM
 					{
 						var v = obj.Table.Get(idx);
 
+						// Fork: a table's value is never assigned into, so it is made read-only where it is
+						// instead of copied on every read
 						if (!v.IsNil())
 						{
-							m_ValueStack.Push(v.AsReadOnly());
+							m_ValueStack.Push(v.MakeReadOnly());
 							return instructionPtr;
 						}
 					}
@@ -1511,7 +1513,8 @@ namespace MoonSharp.Interpreter.Execution.VM
 						throw ScriptRuntimeException.UserDataMissingField(ud.Descriptor.Name, idx.String);
 					}
 
-					m_ValueStack.Push(v.AsReadOnly());
+					// Fork: a member's value is fresh or shared read-only, so it needs no copy
+					m_ValueStack.Push(v.MakeReadOnly());
 					return instructionPtr;
 				}
 				else
