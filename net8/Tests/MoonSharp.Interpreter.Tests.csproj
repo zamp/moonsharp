@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<!-- Fork: upstream's test suite, run with its own embedded runner (dotnet run) -->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<LangVersion>7.3</LangVersion>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+		<WarningLevel>0</WarningLevel>
+		<NoWarn>$(NoWarn);CS0162;CS0168;CS0169;CS0219;CS0414;CS0618;CS0649;CS1591;CS0429;CS8981;SYSLIB0050;SYSLIB0051</NoWarn>
+		<DefineConstants>$(DefineConstants);EMBEDTEST;DOTNET_CORE</DefineConstants>
+		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	</PropertyGroup>
+	<ItemGroup>
+		<Compile Include="Program.cs" />
+		<Compile Include="../../src/MoonSharp.Interpreter.Tests/**/*.cs" Exclude="../../src/MoonSharp.Interpreter.Tests/_Projects/**" />
+		<None Include="../../src/MoonSharp.Interpreter.Tests/TestMore/**/*.t;../../src/MoonSharp.Interpreter.Tests/TestMore/**/*.lua" LinkBase="TestMore" CopyToOutputDirectory="PreserveNewest" />
+		<ProjectReference Include="../MoonSharp.Interpreter.csproj" />
+	</ItemGroup>
+</Project>
